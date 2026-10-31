@@ -1,0 +1,83 @@
+[
+  {
+    "incident_id": "INC-001-DB-SPIKE",
+    "name": "Database Latency Spike",
+    "description": "Lock contention on relation order_items in postgres-db causing cascaded cart and checkout timeouts.",
+    "ground_truth_root_cause": "postgres-db",
+    "category": "database_lock",
+    "services": [
+      "frontend",
+      "api-gateway",
+      "cart-service",
+      "checkout-service",
+      "postgres-db",
+      "redis-cache"
+    ]
+  },
+  {
+    "incident_id": "INC-002-PAY-FAIL",
+    "name": "Payment Service Failure",
+    "description": "Payment service throws 500 internal errors and 85% error rate due to expired gateway SSL certificate.",
+    "ground_truth_root_cause": "payment-service",
+    "category": "service_crash",
+    "services": [
+      "frontend",
+      "api-gateway",
+      "checkout-service",
+      "payment-service",
+      "notification-service"
+    ]
+  },
+  {
+    "incident_id": "INC-003-API-GATEWAY",
+    "name": "API Gateway Latency Spike",
+    "description": "ReDoS vulnerability / route matching thread stall in API gateway causing frontend latency surge.",
+    "ground_truth_root_cause": "api-gateway",
+    "category": "gateway_bottleneck",
+    "services": [
+      "frontend",
+      "api-gateway",
+      "user-service",
+      "product-service"
+    ]
+  },
+  {
+    "incident_id": "INC-004-INV-OVERLOAD",
+    "name": "Inventory Service Overload",
+    "description": "Flash sale traffic saturates inventory-service CPU to 98% and memory to 94% with queued requests.",
+    "ground_truth_root_cause": "inventory-service",
+    "category": "resource_exhaustion",
+    "services": [
+      "frontend",
+      "api-gateway",
+      "product-service",
+      "inventory-service",
+      "warehouse-db"
+    ]
+  },
+  {
+    "incident_id": "INC-005-HEALTHY",
+    "name": "Normal Healthy System",
+    "description": "Normal steady-state traffic across all microservices with no anomalous deviations.",
+    "ground_truth_root_cause": "None",
+    "category": "healthy",
+    "services": [
+      "frontend",
+      "api-gateway",
+      "user-service",
+      "cart-service",
+      "postgres-db"
+    ]
+  },
+  {
+    "incident_id": "INC-006-INSUFFICIENT",
+    "name": "Insufficient Telemetry Evidence",
+    "description": "Sparse metrics and missing trace logs prevent conclusive deterministic diagnosis.",
+    "ground_truth_root_cause": "unknown",
+    "category": "inconclusive",
+    "services": [
+      "frontend",
+      "analytics-worker"
+    ]
+  }
+]

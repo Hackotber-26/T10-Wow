@@ -1,0 +1,16 @@
+incident_id,timestamp,service,level,message,log_id
+INC-001-DB-SPIKE,2026-10-30T14:11:15Z,postgres-db,ERROR,ERROR: query wait lock timeout on relation order_items after 30000ms,LOG-PG-001
+INC-001-DB-SPIKE,2026-10-30T14:11:45Z,postgres-db,ERROR,FATAL: deadlock detected while waiting for ShareLock on transaction 849201,LOG-PG-002
+INC-001-DB-SPIKE,2026-10-30T14:12:10Z,cart-service,ERROR,"HikariPool-1 - Connection is not available, request timed out after 30000ms",LOG-CART-001
+INC-001-DB-SPIKE,2026-10-30T14:12:30Z,api-gateway,WARN,Upstream service 'cart-service' slow response: 1050ms,LOG-GW-001
+INC-001-DB-SPIKE,2026-10-30T14:05:00Z,postgres-db,INFO,Checkpoint complete: wrote 842 buffers (5.1%),LOG-PG-003
+INC-002-PAY-FAIL,2026-10-30T15:10:05Z,payment-service,ERROR,SSLHandshakeException: PKIX path validation failed: certificate expired 2026-10-30T00:00:00Z,LOG-PAY-001
+INC-002-PAY-FAIL,2026-10-30T15:10:20Z,payment-service,FATAL,PaymentGatewayClientException: 503 Service Unavailable on POST /v2/charges,LOG-PAY-002
+INC-002-PAY-FAIL,2026-10-30T15:11:00Z,checkout-service,ERROR,Call to payment-service failed with HTTP 500 Internal Server Error,LOG-CHK-001
+INC-003-API-GATEWAY,2026-10-30T16:08:12Z,api-gateway,ERROR,Regular expression evaluation timeout in path matcher: [a-z0-9._%+-]+@...,LOG-GW-010
+INC-003-API-GATEWAY,2026-10-30T16:09:00Z,api-gateway,ERROR,Worker thread pool starvation: 64/64 threads busy in regex matcher,LOG-GW-011
+INC-004-INV-OVERLOAD,2026-10-30T17:09:30Z,inventory-service,ERROR,OutOfMemoryError: Java heap space during batch inventory reservation,LOG-INV-001
+INC-004-INV-OVERLOAD,2026-10-30T17:10:00Z,inventory-service,ERROR,High CPU throttle: cgroup throttled 420 periods in last 10s,LOG-INV-002
+INC-005-HEALTHY,2026-10-30T18:05:00Z,api-gateway,INFO,Health check OK 200,LOG-HLT-001
+INC-005-HEALTHY,2026-10-30T18:05:10Z,postgres-db,INFO,Auto-vacuum completed on pg_catalog.pg_class,LOG-HLT-002
+INC-006-INSUFFICIENT,2026-10-30T19:00:10Z,analytics-worker,INFO,Batch cycle started,LOG-INS-001
