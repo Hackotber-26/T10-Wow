@@ -1,6 +1,4 @@
-# RootSight — Auditable Root-Cause Analysis for Cloud Outages
-
-> *"We solve slow, untrustworthy outage diagnosis using deterministic causal analysis of telemetry, with AI only to explain."*
+# RootSight — Auditable Root-Cause Analysis for Cloud Outage
 
 ---
 
