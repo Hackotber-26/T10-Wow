@@ -1,0 +1,15 @@
+incident_id,trace_id,span_id,parent_span_id,source_service,destination_service,latency_ms,timestamp
+INC-001-DB-SPIKE,TR-001-A,SP-01,,frontend,api-gateway,1150.0,2026-10-30T14:12:00Z
+INC-001-DB-SPIKE,TR-001-A,SP-02,SP-01,api-gateway,cart-service,1080.0,2026-10-30T14:12:00Z
+INC-001-DB-SPIKE,TR-001-A,SP-03,SP-02,cart-service,postgres-db,995.0,2026-10-30T14:12:01Z
+INC-001-DB-SPIKE,TR-001-B,SP-04,,cart-service,redis-cache,4.5,2026-10-30T14:12:02Z
+INC-002-PAY-FAIL,TR-002-A,SP-20,,api-gateway,checkout-service,900.0,2026-10-30T15:11:00Z
+INC-002-PAY-FAIL,TR-002-A,SP-21,SP-20,checkout-service,payment-service,850.0,2026-10-30T15:11:00Z
+INC-002-PAY-FAIL,TR-002-B,SP-22,,checkout-service,notification-service,15.0,2026-10-30T15:11:02Z
+INC-003-API-GATEWAY,TR-003-A,SP-30,,frontend,api-gateway,1500.0,2026-10-30T16:09:00Z
+INC-003-API-GATEWAY,TR-003-A,SP-31,SP-30,api-gateway,user-service,12.0,2026-10-30T16:09:01Z
+INC-004-INV-OVERLOAD,TR-004-A,SP-40,,api-gateway,product-service,850.0,2026-10-30T17:10:00Z
+INC-004-INV-OVERLOAD,TR-004-A,SP-41,SP-40,product-service,inventory-service,810.0,2026-10-30T17:10:00Z
+INC-004-INV-OVERLOAD,TR-004-A,SP-42,SP-41,inventory-service,warehouse-db,14.0,2026-10-30T17:10:01Z
+INC-005-HEALTHY,TR-005-A,SP-50,,api-gateway,user-service,21.0,2026-10-30T18:05:00Z
+INC-005-HEALTHY,TR-005-B,SP-51,,cart-service,postgres-db,13.5,2026-10-30T18:05:01Z
