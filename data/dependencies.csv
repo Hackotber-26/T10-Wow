@@ -1,6 +1,11 @@
 incident_id,source_service,destination_service,call_count
 INC-001-DB-SPIKE,frontend,api-gateway,500
-INC-001-DB-SPIKE,api-gateway,cart-service,350
+INC-001-DB-SPIKE,api-gateway,checkout-service,320
+INC-001-DB-SPIKE,api-gateway,cart-service,180
+INC-001-DB-SPIKE,checkout-service,payment-service,280
+INC-001-DB-SPIKE,checkout-service,inventory-service,200
+INC-001-DB-SPIKE,payment-service,postgres-db,280
+INC-001-DB-SPIKE,inventory-service,postgres-db,180
 INC-001-DB-SPIKE,cart-service,postgres-db,350
 INC-001-DB-SPIKE,cart-service,redis-cache,200
 INC-001-DB-SPIKE,checkout-service,postgres-db,120

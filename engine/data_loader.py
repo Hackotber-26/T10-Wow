@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
+import numpy as np
 
 
 @dataclass
@@ -87,19 +88,27 @@ class DataLoader:
         # Clean service names
         cleaned["service"] = cleaned["service"].astype(str).str.strip()
         cleaned["metric_name"] = cleaned["metric_name"].astype(str).str.strip()
-        
+
         # Coerce numeric values
         initial_count = len(cleaned)
         cleaned["metric_value"] = pd.to_numeric(cleaned["metric_value"], errors="coerce")
-        dropped_nan = cleaned["metric_value"].isna().sum()
-        if dropped_nan > 0:
-            warnings.append(f"Dropped {dropped_nan} row(s) with non-numeric metric_value.")
-            cleaned = cleaned.dropna(subset=["metric_value"])
+        bad_values = cleaned["metric_value"].isna() | ~np.isfinite(cleaned["metric_value"])
+        if bad_values.any():
+            warnings.append(f"Dropped {int(bad_values.sum())} row(s) with invalid metric_value.")
+            cleaned = cleaned.loc[~bad_values].copy()
+        bad_identity = (cleaned["service"].str.lower().isin(["", "nan", "none"])) | (cleaned["metric_name"].str.lower().isin(["", "nan", "none"]))
+        if bad_identity.any():
+            warnings.append(f"Dropped {int(bad_identity.sum())} row(s) with blank service or metric_name.")
+            cleaned = cleaned.loc[~bad_identity].copy()
+        duplicates = int(cleaned.duplicated().sum())
+        if duplicates:
+            warnings.append(f"Removed {duplicates} exact duplicate metric row(s).")
+            cleaned = cleaned.drop_duplicates().copy()
 
         if "timestamp" not in cleaned.columns:
             warnings.append("No 'timestamp' column provided in metrics; timestamps will be indexed.")
 
-        return ValidationReport(True, errors, warnings, len(cleaned), cleaned)
+        return ValidationReport(bool(len(cleaned)), errors if len(cleaned) else ["No valid metric rows remain."], warnings, len(cleaned), cleaned)
 
     @staticmethod
     def validate_logs_df(df: Optional[pd.DataFrame]) -> ValidationReport:
@@ -117,12 +126,20 @@ class DataLoader:
         cleaned["service"] = cleaned["service"].astype(str).str.strip()
         cleaned["level"] = cleaned["level"].astype(str).str.upper().str.strip()
         cleaned["message"] = cleaned["message"].astype(str)
+        bad_identity = cleaned["service"].str.lower().isin(["", "nan", "none"])
+        if bad_identity.any():
+            warnings.append(f"Dropped {int(bad_identity.sum())} log row(s) with blank service.")
+            cleaned = cleaned.loc[~bad_identity].copy()
+        duplicates = int(cleaned.duplicated().sum())
+        if duplicates:
+            warnings.append(f"Removed {duplicates} exact duplicate log row(s).")
+            cleaned = cleaned.drop_duplicates().copy()
 
         if "log_id" not in cleaned.columns:
             warnings.append("Synthesizing log_id identifiers for records without log_id.")
             cleaned["log_id"] = [f"LOG-AUTO-{i}" for i in range(len(cleaned))]
 
-        return ValidationReport(True, errors, warnings, len(cleaned), cleaned)
+        return ValidationReport(bool(len(cleaned)), errors if len(cleaned) else ["No valid log rows remain."], warnings, len(cleaned), cleaned)
 
     @staticmethod
     def validate_traces_df(df: Optional[pd.DataFrame]) -> ValidationReport:
@@ -148,13 +165,53 @@ class DataLoader:
         cleaned["source_service"] = cleaned["source_service"].astype(str).str.strip()
         cleaned["destination_service"] = cleaned["destination_service"].astype(str).str.strip()
         cleaned["latency_ms"] = pd.to_numeric(cleaned["latency_ms"], errors="coerce")
-        cleaned = cleaned.dropna(subset=["latency_ms"])
+        bad_rows = cleaned["latency_ms"].isna() | ~np.isfinite(cleaned["latency_ms"]) | cleaned["source_service"].str.lower().isin(["", "nan", "none"]) | cleaned["destination_service"].str.lower().isin(["", "nan", "none"])
+        if bad_rows.any():
+            warnings.append(f"Dropped {int(bad_rows.sum())} trace row(s) with invalid endpoints or latency.")
+            cleaned = cleaned.loc[~bad_rows].copy()
+        duplicates = int(cleaned.duplicated().sum())
+        if duplicates:
+            warnings.append(f"Removed {duplicates} exact duplicate trace row(s).")
+            cleaned = cleaned.drop_duplicates().copy()
 
         if "trace_id" not in cleaned.columns:
             warnings.append("Synthesizing trace_id identifiers.")
             cleaned["trace_id"] = [f"TR-AUTO-{i}" for i in range(len(cleaned))]
 
-        return ValidationReport(True, errors, warnings, len(cleaned), cleaned)
+        return ValidationReport(bool(len(cleaned)), errors if len(cleaned) else ["No valid trace rows remain."], warnings, len(cleaned), cleaned)
+
+    @staticmethod
+    def validate_dependencies_df(df: Optional[pd.DataFrame]) -> ValidationReport:
+        if df is None or df.empty:
+            return ValidationReport(True, [], ["Dependencies dataset is empty."], 0, pd.DataFrame())
+        cleaned = df.copy()
+        if "source_service" not in cleaned and "source" in cleaned:
+            cleaned["source_service"] = cleaned["source"]
+        if "destination_service" not in cleaned and "destination" in cleaned:
+            cleaned["destination_service"] = cleaned["destination"]
+        required = {"source_service", "destination_service"}
+        missing = required - set(cleaned.columns)
+        if missing:
+            return ValidationReport(False, [f"Dependencies missing columns: {sorted(missing)}"], [], len(cleaned), None)
+        cleaned["source_service"] = cleaned["source_service"].fillna("").astype(str).str.strip()
+        cleaned["destination_service"] = cleaned["destination_service"].fillna("").astype(str).str.strip()
+        invalid = (cleaned["source_service"] == "") | (cleaned["destination_service"] == "") | (cleaned["source_service"] == cleaned["destination_service"])
+        warnings = []
+        if invalid.any():
+            warnings.append(f"Dropped {int(invalid.sum())} dependency row(s) with blank or self-referential services.")
+            cleaned = cleaned.loc[~invalid].copy()
+        for col in ("weight", "call_count"):
+            if col in cleaned.columns:
+                cleaned[col] = pd.to_numeric(cleaned[col], errors="coerce")
+                bad = cleaned[col].isna() | ~np.isfinite(cleaned[col]) | (cleaned[col] < 0)
+                if bad.any():
+                    warnings.append(f"Dropped {int(bad.sum())} dependency row(s) with invalid {col}.")
+                    cleaned = cleaned.loc[~bad].copy()
+        duplicate_count = int(cleaned.duplicated().sum())
+        if duplicate_count:
+            warnings.append(f"Removed {duplicate_count} exact duplicate dependency row(s).")
+            cleaned = cleaned.drop_duplicates().copy()
+        return ValidationReport(bool(len(cleaned)), [] if len(cleaned) else ["No valid dependency rows remain."], warnings, len(cleaned), cleaned)
 
     @classmethod
     def normalize_metrics(cls, df: pd.DataFrame) -> pd.DataFrame:

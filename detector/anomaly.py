@@ -84,12 +84,12 @@ class AnomalyDetector:
         """
         if mad > 1e-9:
             return 0.6745 * (value - median) / mad
-        
+
         # MAD is 0 (all or most baseline points are identical)
         diff = value - median
         if abs(diff) < 1e-9:
             return 0.0
-        
+
         # When MAD is 0, use a scaled difference based on standard baseline scale
         # If median is non-zero, scale by |median|; otherwise fallback to absolute diff
         scale = abs(median) * 0.1 if abs(median) > 1e-6 else 1.0
@@ -153,7 +153,7 @@ class AnomalyDetector:
                 median, mad = self.calculate_mad(baseline_vals)
                 for idx, val, ts in zip(record_ids, values, timestamps):
                     z = self.compute_robust_z(val, median, mad)
-                    
+
                     # Direction of anomaly: high latency/error/cpu, or abnormally low throughput
                     is_suspicious = False
                     direction = "high"

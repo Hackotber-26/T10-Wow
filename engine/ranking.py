@@ -73,7 +73,7 @@ class DeterministicRankingEngine:
         signals: Dict[str, Dict[str, Any]] = {
             s: {
                 "A": 0.0,  # Metric anomaly
-                "D": 0.0,  # Dependency causal impact
+                "D": 0.0,  # Dependency propagation support
                 "T": 0.0,  # Trace anomaly
                 "L": 0.0,  # Log anomaly
                 "metric_records": [],
@@ -93,7 +93,7 @@ class DeterministicRankingEngine:
                     "metric_records": [], "trace_records": [], "log_records": [],
                     "evidence_ids": [],
                 }
-            
+
             sig = signals[svc]
             sig["evidence_ids"].append(anom.evidence_reference)
 
@@ -108,10 +108,10 @@ class DeterministicRankingEngine:
                 sig["A"] = max(sig["A"], anom.anomaly_score)
                 sig["metric_records"].append(anom)
 
-        # 2. Compute Dependency Causal Evidence D(v)
+        # 2. Compute dependency propagation support D(v); this is association, not causal proof.
         # In service dependencies A -> B (A calls B):
         # If callee B has an anomaly, and upstream callers of B also experience anomalies,
-        # B is explaining those upstream anomalies. Thus B receives a high causal score.
+        # B receives support when upstream callers are also anomalous; this is not causal proof.
         G = graph_result.graph
         anomalous_nodes = {s for s, sig in signals.items() if (sig["A"] > 0 or sig["T"] > 0 or sig["L"] > 0)}
 
@@ -123,7 +123,7 @@ class DeterministicRankingEngine:
                 except Exception:
                     ancestors = set()
                 impacted_anom_callers = ancestors.intersection(anomalous_nodes)
-                
+
                 # Callee failure explanation power:
                 # If svc is anomalous, and 2 upstream callers are also anomalous, D(svc) increases.
                 # If svc calls downstream callees that are anomalous, then svc might be a victim, not root!
@@ -236,14 +236,14 @@ class DeterministicRankingEngine:
     ) -> List[CandidateRanking]:
         """
         Method B: Personalized PageRank over Service Dependency Graph.
-        
+
         Graph Orientation Semantics:
         Edges A -> B indicate service A calls service B.
-        When B develops an internal failure (root cause), callers like A experience symptoms
-        (latency spikes, timeouts).
+        When B has evidence, callers like A may also show symptoms (latency spikes, timeouts).
         We construct a personalization vector on nodes with observed anomalies.
         Random walks traverse dependency edges towards invoked services (from caller to callee),
-        so probability mass accumulates at the structural sink / callee bottleneck causing the failures.
+        so probability mass can accumulate at the structural sink / callee bottleneck. This
+        topology signal alone does not show that the node caused the observed symptoms.
         """
         signals = self._extract_signals(services, anomalies, graph_result)
         G = graph_result.graph.copy()
@@ -275,7 +275,7 @@ class DeterministicRankingEngine:
             v_anom = max(v_sig.get("A", 0.0), v_sig.get("T", 0.0), v_sig.get("L", 0.0))
             G[u][v]["weight"] = float(G[u][v].get("weight", 1.0)) * (1.0 + 4.0 * v_anom)
 
-        # Add self-loops to sink nodes so causal random walk concentrates at terminal bottlenecks
+        # Add self-loops to sink nodes so the walk can retain mass at terminal topology nodes.
         for n in list(G.nodes()):
             if G.out_degree(n) == 0:
                 G.add_edge(n, n, weight=2.0)
@@ -307,7 +307,7 @@ class DeterministicRankingEngine:
             pr_val = pr_scores.get(svc, 0.0)
             norm_pr = norm_pr_scores.get(svc, 0.0)
             sig = signals.get(svc, {"A": 0.0, "D": 0.0, "T": 0.0, "L": 0.0, "evidence_ids": []})
-            
+
             # Intrinsic anomaly score combines direct metric, trace, and log evidence
             intrinsic_score = (0.40 * sig["A"]) + (0.35 * sig["T"]) + (0.25 * sig["L"])
 

@@ -6,6 +6,7 @@ missing telemetry components, and empty inputs.
 
 import pytest
 import pandas as pd
+import networkx as nx
 from engine.data_loader import DataLoader
 from engine.pipeline import DiagnosisPipeline
 
@@ -27,6 +28,19 @@ def test_scenario_database_latency_spike(loader, pipeline):
     assert res.top_candidate.service == "postgres-db"
     assert res.top_candidate.score >= 0.70
     assert res.verification_result.passed is True
+
+
+def test_ecommerce_demo_cascade_has_ordered_evidence_and_inventory_impact(loader, pipeline):
+    metrics, logs, traces, dependencies = loader.load_incident_telemetry("INC-001-DB-SPIKE")
+    result = pipeline.run("INC-001-DB-SPIKE", metrics, logs, traces, dependencies)
+    pg = metrics[(metrics.service == "postgres-db") & (metrics.metric_name == "latency_ms")]
+    assert pg[pg.timestamp < "2026-10-30T14:11:00Z"].metric_value.median() < 50
+    assert pg[pg.timestamp >= "2026-10-30T14:11:00Z"].metric_value.median() > 800
+    event_time = [logs[logs.service == service].timestamp.min() for service in ("postgres-db", "payment-service", "api-gateway", "inventory-service")]
+    assert event_time == sorted(event_time)
+    assert result.top_candidate.service == "postgres-db"
+    assert "inventory-service" in result.graph_result.graph
+    assert "inventory-service" in nx.ancestors(result.graph_result.graph, "postgres-db")
 
 
 def test_scenario_payment_service_failure(loader, pipeline):

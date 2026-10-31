@@ -21,10 +21,10 @@ def generate_all_data():
         {
             "incident_id": "INC-001-DB-SPIKE",
             "name": "Database Latency Spike",
-            "description": "Lock contention on relation order_items in postgres-db causing cascaded cart and checkout timeouts.",
+            "description": "Synthetic e-commerce cascade: postgres-db latency rises, payment timeouts follow, API Gateway slows, then inventory shows possible downstream impact.",
             "ground_truth_root_cause": "postgres-db",
             "category": "database_lock",
-            "services": ["frontend", "api-gateway", "cart-service", "checkout-service", "postgres-db", "redis-cache"],
+            "services": ["frontend", "api-gateway", "cart-service", "checkout-service", "payment-service", "inventory-service", "postgres-db", "redis-cache"],
         },
         {
             "incident_id": "INC-002-PAY-FAIL",
@@ -78,6 +78,9 @@ def generate_all_data():
     for t in range(1, 16):
         ts = f"2026-10-30T14:{t:02d}:00Z"
         is_spike = (t >= 11)
+        payment_impacted = (t >= 12)
+        gateway_impacted = (t >= 13)
+        inventory_impacted = (t >= 14)
 
         # postgres-db (Root cause: latency surges from 15ms to 980ms)
         pg_lat = np.random.normal(950, 40) if is_spike else np.random.normal(15, 2)
@@ -95,9 +98,20 @@ def generate_all_data():
             {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "cart-service", "metric_name": "error_rate", "metric_value": 0.05 if is_spike else 0.0},
         ])
 
-        # api-gateway (Calls cart: latency increases)
-        gw_lat = np.random.normal(1100, 60) if is_spike else np.random.normal(45, 5)
-        metrics_rows.append({"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "api-gateway", "metric_name": "latency_ms", "metric_value": round(float(gw_lat), 2)})
+        # Payment timeouts follow the database deviation; gateway and inventory symptoms follow later.
+        checkout_lat = 820.0 if payment_impacted else 95.0
+        pay_lat = 760.0 if payment_impacted else 135.0
+        gw_lat = 1180.0 if gateway_impacted else (50.0 if payment_impacted else 45.0)
+        inventory_lat = 620.0 if inventory_impacted else 68.0
+        metrics_rows.extend([
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "checkout-service", "metric_name": "latency_ms", "metric_value": checkout_lat},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "checkout-service", "metric_name": "error_rate", "metric_value": 0.18 if payment_impacted else 0.0},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "payment-service", "metric_name": "latency_ms", "metric_value": pay_lat},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "payment-service", "metric_name": "error_rate", "metric_value": 0.42 if payment_impacted else 0.01},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "api-gateway", "metric_name": "latency_ms", "metric_value": gw_lat},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "inventory-service", "metric_name": "latency_ms", "metric_value": inventory_lat},
+            {"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "inventory-service", "metric_name": "error_rate", "metric_value": 0.08 if inventory_impacted else 0.0},
+        ])
 
         # redis-cache (Healthy dependency)
         metrics_rows.append({"incident_id": "INC-001-DB-SPIKE", "timestamp": ts, "service": "redis-cache", "metric_name": "latency_ms", "metric_value": round(float(np.random.normal(3, 0.5)), 2)})
@@ -106,23 +120,30 @@ def generate_all_data():
     logs_rows.extend([
         {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:11:15Z", "service": "postgres-db", "level": "ERROR", "message": "ERROR: query wait lock timeout on relation order_items after 30000ms", "log_id": "LOG-PG-001"},
         {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:11:45Z", "service": "postgres-db", "level": "ERROR", "message": "FATAL: deadlock detected while waiting for ShareLock on transaction 849201", "log_id": "LOG-PG-002"},
-        {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:12:10Z", "service": "cart-service", "level": "ERROR", "message": "HikariPool-1 - Connection is not available, request timed out after 30000ms", "log_id": "LOG-CART-001"},
-        {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:12:30Z", "service": "api-gateway", "level": "WARN", "message": "Upstream service 'cart-service' slow response: 1050ms", "log_id": "LOG-GW-001"},
+        {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:12:10Z", "service": "payment-service", "level": "ERROR", "message": "Payment request timed out waiting for postgres-db response", "log_id": "LOG-PAY-001"},
+        {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:13:10Z", "service": "api-gateway", "level": "WARN", "message": "Upstream checkout request exceeded latency budget after payment timeout burst", "log_id": "LOG-GW-001"},
+        {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:14:10Z", "service": "inventory-service", "level": "WARN", "message": "Inventory reservation retries elevated during checkout degradation; impact is downstream and not a confirmed root cause", "log_id": "LOG-INV-001"},
         {"incident_id": "INC-001-DB-SPIKE", "timestamp": "2026-10-30T14:05:00Z", "service": "postgres-db", "level": "INFO", "message": "Checkpoint complete: wrote 842 buffers (5.1%)", "log_id": "LOG-PG-003"},
     ])
 
-    # Traces for INC-001
+    # Spans are time-ordered to show the observed synthetic sequence, not to assert causation.
     traces_rows.extend([
-        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-A", "span_id": "SP-01", "parent_span_id": None, "source_service": "frontend", "destination_service": "api-gateway", "latency_ms": 1150.0, "timestamp": "2026-10-30T14:12:00Z"},
-        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-A", "span_id": "SP-02", "parent_span_id": "SP-01", "source_service": "api-gateway", "destination_service": "cart-service", "latency_ms": 1080.0, "timestamp": "2026-10-30T14:12:00Z"},
-        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-A", "span_id": "SP-03", "parent_span_id": "SP-02", "source_service": "cart-service", "destination_service": "postgres-db", "latency_ms": 995.0, "timestamp": "2026-10-30T14:12:01Z"},
-        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-B", "span_id": "SP-04", "parent_span_id": None, "source_service": "cart-service", "destination_service": "redis-cache", "latency_ms": 4.5, "timestamp": "2026-10-30T14:12:02Z"},
+        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-DB", "span_id": "SP-01", "parent_span_id": None, "source_service": "payment-service", "destination_service": "postgres-db", "latency_ms": 995.0, "timestamp": "2026-10-30T14:11:01Z"},
+        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-PAY", "span_id": "SP-02", "parent_span_id": None, "source_service": "checkout-service", "destination_service": "payment-service", "latency_ms": 840.0, "timestamp": "2026-10-30T14:12:01Z"},
+        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-GW", "span_id": "SP-03", "parent_span_id": None, "source_service": "api-gateway", "destination_service": "checkout-service", "latency_ms": 1180.0, "timestamp": "2026-10-30T14:13:01Z"},
+        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-INV", "span_id": "SP-04", "parent_span_id": None, "source_service": "checkout-service", "destination_service": "inventory-service", "latency_ms": 620.0, "timestamp": "2026-10-30T14:14:01Z"},
+        {"incident_id": "INC-001-DB-SPIKE", "trace_id": "TR-001-CACHE", "span_id": "SP-05", "parent_span_id": None, "source_service": "cart-service", "destination_service": "redis-cache", "latency_ms": 4.5, "timestamp": "2026-10-30T14:12:02Z"},
     ])
 
     # Dependencies for INC-001
     deps_rows.extend([
         {"incident_id": "INC-001-DB-SPIKE", "source_service": "frontend", "destination_service": "api-gateway", "call_count": 500},
-        {"incident_id": "INC-001-DB-SPIKE", "source_service": "api-gateway", "destination_service": "cart-service", "call_count": 350},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "api-gateway", "destination_service": "checkout-service", "call_count": 320},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "api-gateway", "destination_service": "cart-service", "call_count": 180},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "checkout-service", "destination_service": "payment-service", "call_count": 280},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "checkout-service", "destination_service": "inventory-service", "call_count": 200},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "payment-service", "destination_service": "postgres-db", "call_count": 280},
+        {"incident_id": "INC-001-DB-SPIKE", "source_service": "inventory-service", "destination_service": "postgres-db", "call_count": 180},
         {"incident_id": "INC-001-DB-SPIKE", "source_service": "cart-service", "destination_service": "postgres-db", "call_count": 350},
         {"incident_id": "INC-001-DB-SPIKE", "source_service": "cart-service", "destination_service": "redis-cache", "call_count": 200},
         {"incident_id": "INC-001-DB-SPIKE", "source_service": "checkout-service", "destination_service": "postgres-db", "call_count": 120},

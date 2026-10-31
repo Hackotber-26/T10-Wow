@@ -2,7 +2,7 @@
   {
     "incident_id": "INC-001-DB-SPIKE",
     "name": "Database Latency Spike",
-    "description": "Lock contention on relation order_items in postgres-db causing cascaded cart and checkout timeouts.",
+    "description": "Synthetic e-commerce cascade: postgres-db latency rises, payment timeouts follow, API Gateway slows, then inventory shows possible downstream impact.",
     "ground_truth_root_cause": "postgres-db",
     "category": "database_lock",
     "services": [
@@ -10,6 +10,8 @@
       "api-gateway",
       "cart-service",
       "checkout-service",
+      "payment-service",
+      "inventory-service",
       "postgres-db",
       "redis-cache"
     ]
